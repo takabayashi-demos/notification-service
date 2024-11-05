@@ -1,116 +1,76 @@
 /**
- * Notification Service - Walmart Platform
- * Multi-channel notification delivery.
- *
- * INTENTIONAL ISSUES (for demo):
- * - SSRF vulnerability in webhook URL
- * - No rate limiting on send endpoint
- * - Email template injection
- * - Unhandled promise rejections
+ * Webhook handler for notification-service.
+ * Manages delivery tracking operations.
  */
-const express = require('express');
-const http = require('http');
-const app = express();
-const PORT = process.env.PORT || 8080;
+const { EventEmitter } = require('events');
 
-app.use(express.json());
+class WebhookHandler extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.config = {
+      timeout: options.timeout || 5000,
+      maxRetries: options.maxRetries || 3,
+      batchSize: options.batchSize || 100,
+    };
+    this.cache = new Map();
+    this.metrics = { requests: 0, errors: 0, totalLatency: 0 };
+  }
 
-const notifications = [];
-let sendCount = 0;
+  async process(data) {
+    const start = Date.now();
+    this.metrics.requests++;
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'UP', service: 'notification-service', version: '1.4.2' });
-});
+    try {
+      this._validate(data);
+      const result = await this._execute(data);
+      this.emit('webhook:success', result);
+      return { status: 'ok', data: result };
+    } catch (error) {
+      this.metrics.errors++;
+      this.emit('webhook:error', error);
+      throw error;
+    } finally {
+      this.metrics.totalLatency += Date.now() - start;
+    }
+  }
 
-app.get('/ready', (req, res) => {
-  res.json({ status: 'READY' });
-});
+  _validate(data) {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid webhook data: expected object');
+    }
+  }
 
-app.post('/api/v1/notifications/send', (req, res) => {
-  const { channel, recipient, subject, body, template_data } = req.body;
+  async _execute(data) {
+    // Check cache first
+    const cacheKey = JSON.stringify(data);
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
 
-  // ❌ BUG: No rate limiting - can spam notifications
-  sendCount++;
+    const result = { processed: true, component: 'webhook', timestamp: new Date().toISOString() };
+    this.cache.set(cacheKey, result);
 
-  // ❌ VULNERABILITY: Template injection - user input directly in template
-  const rendered = body ? body.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return template_data?.[key] || match;
-  }) : '';
+    // Evict old cache entries
+    if (this.cache.size > 10000) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
 
-  const notification = {
-    id: `NOTIF-${sendCount.toString().padStart(6, '0')}`,
-    channel: channel || 'email',
-    recipient,
-    subject,
-    body: rendered,
-    status: 'sent',
-    sent_at: new Date().toISOString(),
-  };
+    return result;
+  }
 
-  // Simulate sending delay
-  const delay = channel === 'sms' ? 200 : channel === 'push' ? 100 : 150;
-  setTimeout(() => {
-    notifications.push(notification);
-  }, delay);
+  getStats() {
+    return {
+      ...this.metrics,
+      avgLatencyMs: this.metrics.requests > 0
+        ? (this.metrics.totalLatency / this.metrics.requests).toFixed(2)
+        : 0,
+      errorRate: this.metrics.requests > 0
+        ? (this.metrics.errors / this.metrics.requests).toFixed(4)
+        : 0,
+      cacheSize: this.cache.size,
+    };
+  }
+}
 
-  res.status(201).json(notification);
-});
-
-// ❌ VULNERABILITY: SSRF - accepts arbitrary URLs for webhook delivery
-app.post('/api/v1/notifications/webhook', (req, res) => {
-  const { url, payload } = req.body;
-
-  // No URL validation - can hit internal services
-  console.log(`[WEBHOOK] Sending to: ${url}`);
-
-  // Simulate the request (in production this would actually fetch the URL)
-  const notif = {
-    id: `WH-${++sendCount}`,
-    webhook_url: url,
-    status: 'delivered',
-    sent_at: new Date().toISOString(),
-  };
-  notifications.push(notif);
-  res.status(201).json(notif);
-});
-
-app.get('/api/v1/notifications', (req, res) => {
-  const limit = parseInt(req.query.limit) || 50;
-  res.json({
-    notifications: notifications.slice(-limit),
-    total: notifications.length,
-  });
-});
-
-app.get('/api/v1/notifications/stats', (req, res) => {
-  const byChannel = {};
-  notifications.forEach(n => {
-    byChannel[n.channel || 'webhook'] = (byChannel[n.channel || 'webhook'] || 0) + 1;
-  });
-  res.json({
-    total_sent: sendCount,
-    by_channel: byChannel,
-  });
-});
-
-app.get('/metrics', (req, res) => {
-  res.set('Content-Type', 'text/plain');
-  res.send(`# HELP notifications_sent_total Total notifications sent
-# TYPE notifications_sent_total counter
-notifications_sent_total ${sendCount}
-# HELP notification_service_up Service health
-# TYPE notification_service_up gauge
-notification_service_up 1
-`);
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`notification-service listening on port ${PORT}`);
-});
-// Twilio SMS handler
-// URL allowlist check
-// Template renderer
-// Batch sender
-// Delivery tracking
-// Rate limiter middleware
-// Push preferences
+module.exports = { WebhookHandler };
