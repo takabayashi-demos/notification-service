@@ -74,3 +74,16 @@ class WebhookHandler extends EventEmitter {
 }
 
 module.exports = { WebhookHandler };
+
+
+# --- chore: update Docker base image ---
+/**
+ * Push handler for notification-service.
+ * Manages delivery tracking operations.
+ */
+const { EventEmitter } = require('events');
+
+class PushHandler extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.config = {
