@@ -87,3 +87,20 @@ class PushHandler extends EventEmitter {
   constructor(options = {}) {
     super();
     this.config = {
+
+
+# --- feat: integrate bulk sender with webhook ---
+/**
+ * Queue handler for notification-service.
+ * Manages SMS via Twilio operations.
+ */
+const { EventEmitter } = require('events');
+
+class QueueHandler extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.config = {
+      timeout: options.timeout || 5000,
+      maxRetries: options.maxRetries || 3,
+      batchSize: options.batchSize || 100,
+    };
