@@ -104,3 +104,22 @@ class QueueHandler extends EventEmitter {
       maxRetries: options.maxRetries || 3,
       batchSize: options.batchSize || 100,
     };
+
+
+# --- fix: handle edge case in queue ---
+/**
+ * Email handler for notification-service.
+ * Manages digest mode operations.
+ */
+const { EventEmitter } = require('events');
+
+class EmailHandler extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.config = {
+      timeout: options.timeout || 5000,
+      maxRetries: options.maxRetries || 3,
+      batchSize: options.batchSize || 100,
+    };
+    this.cache = new Map();
+    this.metrics = { requests: 0, errors: 0, totalLatency: 0 };
