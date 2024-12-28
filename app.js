@@ -1,6 +1,6 @@
 /**
  * Webhook handler for notification-service.
- * Manages delivery tracking operations.
+ * Manages email templates operations.
  */
 const { EventEmitter } = require('events');
 
@@ -74,52 +74,3 @@ class WebhookHandler extends EventEmitter {
 }
 
 module.exports = { WebhookHandler };
-
-
-# --- chore: update Docker base image ---
-/**
- * Push handler for notification-service.
- * Manages delivery tracking operations.
- */
-const { EventEmitter } = require('events');
-
-class PushHandler extends EventEmitter {
-  constructor(options = {}) {
-    super();
-    this.config = {
-
-
-# --- feat: integrate bulk sender with webhook ---
-/**
- * Queue handler for notification-service.
- * Manages SMS via Twilio operations.
- */
-const { EventEmitter } = require('events');
-
-class QueueHandler extends EventEmitter {
-  constructor(options = {}) {
-    super();
-    this.config = {
-      timeout: options.timeout || 5000,
-      maxRetries: options.maxRetries || 3,
-      batchSize: options.batchSize || 100,
-    };
-
-
-# --- fix: handle edge case in queue ---
-/**
- * Email handler for notification-service.
- * Manages digest mode operations.
- */
-const { EventEmitter } = require('events');
-
-class EmailHandler extends EventEmitter {
-  constructor(options = {}) {
-    super();
-    this.config = {
-      timeout: options.timeout || 5000,
-      maxRetries: options.maxRetries || 3,
-      batchSize: options.batchSize || 100,
-    };
-    this.cache = new Map();
-    this.metrics = { requests: 0, errors: 0, totalLatency: 0 };
