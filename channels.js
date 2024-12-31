@@ -1,10 +1,10 @@
 /**
- * Queue handler for notification-service.
- * Manages digest mode operations.
+ * Scheduler handler for notification-service.
+ * Manages priority queuing operations.
  */
 const { EventEmitter } = require('events');
 
-class QueueHandler extends EventEmitter {
+class SchedulerHandler extends EventEmitter {
   constructor(options = {}) {
     super();
     this.config = {
@@ -23,11 +23,11 @@ class QueueHandler extends EventEmitter {
     try {
       this._validate(data);
       const result = await this._execute(data);
-      this.emit('queue:success', result);
+      this.emit('scheduler:success', result);
       return { status: 'ok', data: result };
     } catch (error) {
       this.metrics.errors++;
-      this.emit('queue:error', error);
+      this.emit('scheduler:error', error);
       throw error;
     } finally {
       this.metrics.totalLatency += Date.now() - start;
@@ -36,7 +36,7 @@ class QueueHandler extends EventEmitter {
 
   _validate(data) {
     if (!data || typeof data !== 'object') {
-      throw new Error('Invalid queue data: expected object');
+      throw new Error('Invalid scheduler data: expected object');
     }
   }
 
@@ -47,7 +47,7 @@ class QueueHandler extends EventEmitter {
       return this.cache.get(cacheKey);
     }
 
-    const result = { processed: true, component: 'queue', timestamp: new Date().toISOString() };
+    const result = { processed: true, component: 'scheduler', timestamp: new Date().toISOString() };
     this.cache.set(cacheKey, result);
 
     // Evict old cache entries
@@ -73,4 +73,4 @@ class QueueHandler extends EventEmitter {
   }
 }
 
-module.exports = { QueueHandler };
+module.exports = { SchedulerHandler };
