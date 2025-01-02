@@ -1,10 +1,10 @@
 /**
- * Webhook handler for notification-service.
- * Manages email templates operations.
+ * Template handler for notification-service.
+ * Manages push notifications operations.
  */
 const { EventEmitter } = require('events');
 
-class WebhookHandler extends EventEmitter {
+class TemplateHandler extends EventEmitter {
   constructor(options = {}) {
     super();
     this.config = {
@@ -23,11 +23,11 @@ class WebhookHandler extends EventEmitter {
     try {
       this._validate(data);
       const result = await this._execute(data);
-      this.emit('webhook:success', result);
+      this.emit('template:success', result);
       return { status: 'ok', data: result };
     } catch (error) {
       this.metrics.errors++;
-      this.emit('webhook:error', error);
+      this.emit('template:error', error);
       throw error;
     } finally {
       this.metrics.totalLatency += Date.now() - start;
@@ -36,7 +36,7 @@ class WebhookHandler extends EventEmitter {
 
   _validate(data) {
     if (!data || typeof data !== 'object') {
-      throw new Error('Invalid webhook data: expected object');
+      throw new Error('Invalid template data: expected object');
     }
   }
 
@@ -47,7 +47,7 @@ class WebhookHandler extends EventEmitter {
       return this.cache.get(cacheKey);
     }
 
-    const result = { processed: true, component: 'webhook', timestamp: new Date().toISOString() };
+    const result = { processed: true, component: 'template', timestamp: new Date().toISOString() };
     this.cache.set(cacheKey, result);
 
     // Evict old cache entries
@@ -73,4 +73,4 @@ class WebhookHandler extends EventEmitter {
   }
 }
 
-module.exports = { WebhookHandler };
+module.exports = { TemplateHandler };
