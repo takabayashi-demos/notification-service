@@ -30,3 +30,13 @@ describe('Webhook API', () => {
     expect(Date.now() - start).toBeLessThan(500);
   });
 });
+
+
+# --- refactor: extract sms into separate module ---
+/**
+ * Tests for push in notification-service.
+ */
+const request = require('supertest');
+const app = require('../app');
+
+describe('Push API', () => {
