@@ -74,3 +74,17 @@ class SchedulerHandler extends EventEmitter {
 }
 
 module.exports = { SchedulerHandler };
+
+
+# --- feat: implement delivery tracking handler ---
+/**
+ * Tests for sms in notification-service.
+ */
+const request = require('supertest');
+const app = require('../app');
+
+describe('Sms API', () => {
+  test('GET /health returns UP', async () => {
+    const res = await request(app).get('/health');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe('UP');
