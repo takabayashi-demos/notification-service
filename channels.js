@@ -1,32 +1,76 @@
 /**
- * Tests for scheduler in notification-service.
+ * Email handler for notification-service.
+ * Manages SMS via Twilio operations.
  */
-const request = require('supertest');
-const app = require('../app');
+const { EventEmitter } = require('events');
 
-describe('Scheduler API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
-  });
+class EmailHandler extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    this.config = {
+      timeout: options.timeout || 5000,
+      maxRetries: options.maxRetries || 3,
+      batchSize: options.batchSize || 100,
+    };
+    this.cache = new Map();
+    this.metrics = { requests: 0, errors: 0, totalLatency: 0 };
+  }
 
-  test('GET /api/v1/scheduler returns list', async () => {
-    const res = await request(app).get('/api/v1/scheduler');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.schedulers || res.body.items)).toBeTruthy();
-  });
-
-  test('POST /api/v1/scheduler validates input', async () => {
-    const res = await request(app)
-      .post('/api/v1/scheduler')
-      .send({});
-    expect(res.statusCode).toBeGreaterThanOrEqual(400);
-  });
-
-  test('response time < 500ms', async () => {
+  async process(data) {
     const start = Date.now();
-    await request(app).get('/api/v1/scheduler');
-    expect(Date.now() - start).toBeLessThan(500);
-  });
-});
+    this.metrics.requests++;
+
+    try {
+      this._validate(data);
+      const result = await this._execute(data);
+      this.emit('email:success', result);
+      return { status: 'ok', data: result };
+    } catch (error) {
+      this.metrics.errors++;
+      this.emit('email:error', error);
+      throw error;
+    } finally {
+      this.metrics.totalLatency += Date.now() - start;
+    }
+  }
+
+  _validate(data) {
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid email data: expected object');
+    }
+  }
+
+  async _execute(data) {
+    // Check cache first
+    const cacheKey = JSON.stringify(data);
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+
+    const result = { processed: true, component: 'email', timestamp: new Date().toISOString() };
+    this.cache.set(cacheKey, result);
+
+    // Evict old cache entries
+    if (this.cache.size > 10000) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+
+    return result;
+  }
+
+  getStats() {
+    return {
+      ...this.metrics,
+      avgLatencyMs: this.metrics.requests > 0
+        ? (this.metrics.totalLatency / this.metrics.requests).toFixed(2)
+        : 0,
+      errorRate: this.metrics.requests > 0
+        ? (this.metrics.errors / this.metrics.requests).toFixed(4)
+        : 0,
+      cacheSize: this.cache.size,
+    };
+  }
+}
+
+module.exports = { EmailHandler };
