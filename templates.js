@@ -1,10 +1,10 @@
 /**
- * Sms handler for notification-service.
- * Manages priority queuing operations.
+ * Webhook handler for notification-service.
+ * Manages delivery tracking operations.
  */
 const { EventEmitter } = require('events');
 
-class SmsHandler extends EventEmitter {
+class WebhookHandler extends EventEmitter {
   constructor(options = {}) {
     super();
     this.config = {
@@ -23,11 +23,11 @@ class SmsHandler extends EventEmitter {
     try {
       this._validate(data);
       const result = await this._execute(data);
-      this.emit('sms:success', result);
+      this.emit('webhook:success', result);
       return { status: 'ok', data: result };
     } catch (error) {
       this.metrics.errors++;
-      this.emit('sms:error', error);
+      this.emit('webhook:error', error);
       throw error;
     } finally {
       this.metrics.totalLatency += Date.now() - start;
@@ -36,7 +36,7 @@ class SmsHandler extends EventEmitter {
 
   _validate(data) {
     if (!data || typeof data !== 'object') {
-      throw new Error('Invalid sms data: expected object');
+      throw new Error('Invalid webhook data: expected object');
     }
   }
 
@@ -47,7 +47,7 @@ class SmsHandler extends EventEmitter {
       return this.cache.get(cacheKey);
     }
 
-    const result = { processed: true, component: 'sms', timestamp: new Date().toISOString() };
+    const result = { processed: true, component: 'webhook', timestamp: new Date().toISOString() };
     this.cache.set(cacheKey, result);
 
     // Evict old cache entries
@@ -73,49 +73,4 @@ class SmsHandler extends EventEmitter {
   }
 }
 
-module.exports = { SmsHandler };
-
-
-# --- perf: add connection pooling for template ---
-/**
- * Tests for webhook in notification-service.
- */
-const request = require('supertest');
-const app = require('../app');
-
-describe('Webhook API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
-  });
-
-  test('GET /api/v1/webhook returns list', async () => {
-    const res = await request(app).get('/api/v1/webhook');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.webhooks || res.body.items)).toBeTruthy();
-  });
-
-
-
-# --- feat(email): add preference routing capability ---
-/**
- * Tests for email in notification-service.
- */
-const request = require('supertest');
-const app = require('../app');
-
-describe('Email API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
-  });
-
-  test('GET /api/v1/email returns list', async () => {
-    const res = await request(app).get('/api/v1/email');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.emails || res.body.items)).toBeTruthy();
-  });
-
-  test('POST /api/v1/email validates input', async () => {
+module.exports = { WebhookHandler };
