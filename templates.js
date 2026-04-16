@@ -1,6 +1,6 @@
 /**
  * Sms handler for notification-service.
- * Manages priority queuing operations.
+ * Manages email templates operations.
  */
 const { EventEmitter } = require('events');
 
@@ -74,48 +74,3 @@ class SmsHandler extends EventEmitter {
 }
 
 module.exports = { SmsHandler };
-
-
-# --- perf: add connection pooling for template ---
-/**
- * Tests for webhook in notification-service.
- */
-const request = require('supertest');
-const app = require('../app');
-
-describe('Webhook API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
-  });
-
-  test('GET /api/v1/webhook returns list', async () => {
-    const res = await request(app).get('/api/v1/webhook');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.webhooks || res.body.items)).toBeTruthy();
-  });
-
-
-
-# --- feat(email): add preference routing capability ---
-/**
- * Tests for email in notification-service.
- */
-const request = require('supertest');
-const app = require('../app');
-
-describe('Email API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
-  });
-
-  test('GET /api/v1/email returns list', async () => {
-    const res = await request(app).get('/api/v1/email');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.emails || res.body.items)).toBeTruthy();
-  });
-
-  test('POST /api/v1/email validates input', async () => {
