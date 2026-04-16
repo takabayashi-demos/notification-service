@@ -1,32 +1,62 @@
-/**
- * Tests for queue in notification-service.
- */
-const request = require('supertest');
-const app = require('../app');
+const express = require('express');
+const app = express();
 
-describe('Queue API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
-  });
+app.use(express.json());
 
-  test('GET /api/v1/queue returns list', async () => {
-    const res = await request(app).get('/api/v1/queue');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.queues || res.body.items)).toBeTruthy();
-  });
+const queue = [];
+let idCounter = 0;
 
-  test('POST /api/v1/queue validates input', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({});
-    expect(res.statusCode).toBeGreaterThanOrEqual(400);
-  });
+app.get('/health', (req, res) => {
+  res.json({ status: 'UP', timestamp: new Date().toISOString() });
+});
 
-  test('response time < 500ms', async () => {
-    const start = Date.now();
-    await request(app).get('/api/v1/queue');
-    expect(Date.now() - start).toBeLessThan(500);
+app.get('/api/v1/queue', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  res.json({
+    items: queue.slice(-limit),
+    total: queue.length
   });
 });
+
+app.post('/api/v1/queue', (req, res) => {
+  try {
+    const { to, message, channel, priority } = req.body || {};
+
+    if (!to || !message) {
+      return res.status(400).json({ error: 'Missing required fields: to, message' });
+    }
+
+    if (typeof to !== 'string' || typeof message !== 'string') {
+      return res.status(400).json({ error: 'Fields "to" and "message" must be strings' });
+    }
+
+    const recipients = to.split(',').map(r => r.trim()).filter(Boolean);
+
+    if (recipients.length === 0) {
+      return res.status(400).json({ error: 'At least one valid recipient is required' });
+    }
+
+    const entry = {
+      id: `notif-${++idCounter}`,
+      recipients,
+      message,
+      channel: channel || 'email',
+      priority: priority || 'normal',
+      status: 'queued',
+      createdAt: new Date().toISOString()
+    };
+
+    queue.push(entry);
+    res.status(201).json(entry);
+  } catch (err) {
+    console.error('Queue insertion error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.message);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+module.exports = app;
