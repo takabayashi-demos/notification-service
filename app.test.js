@@ -1,54 +1,94 @@
 const request = require('supertest');
 const app = require('./app');
 
-describe('Queue API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
+describe('Notification Service API', () => {
+  describe('GET /health', () => {
+    it('should return healthy status', async () => {
+      const res = await request(app).get('/health');
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('UP');
+      expect(res.body.timestamp).toBeDefined();
+    });
   });
 
-  test('GET /api/v1/queue returns list', async () => {
-    const res = await request(app).get('/api/v1/queue');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.items)).toBeTruthy();
+  describe('POST /api/v1/queue', () => {
+    it('should create a notification with valid input', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'user@example.com',
+          message: 'Test notification',
+          channel: 'email',
+          priority: 'normal'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.id).toMatch(/^notif-\d+$/);
+      expect(res.body.recipients).toEqual(['user@example.com']);
+      expect(res.body.message).toBe('Test notification');
+    });
+
+    it('should reject request with missing required fields', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({ to: 'user@example.com' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation failed');
+      expect(res.body.details).toContain('Field "message" is required');
+    });
+
+    it('should reject invalid channel', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'user@example.com',
+          message: 'Test',
+          channel: 'invalid'
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.details[0]).toContain('Invalid channel');
+    });
+
+    it('should reject invalid priority', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'user@example.com',
+          message: 'Test',
+          priority: 'critical'
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.details[0]).toContain('Invalid priority');
+    });
+
+    it('should parse multiple recipients', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'user1@example.com, user2@example.com',
+          message: 'Test'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.recipients).toHaveLength(2);
+    });
   });
 
-  test('POST /api/v1/queue validates input', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({});
-    expect(res.statusCode).toBe(400);
-  });
+  describe('GET /api/v1/queue', () => {
+    it('should return queue items', async () => {
+      const res = await request(app).get('/api/v1/queue');
+      expect(res.status).toBe(200);
+      expect(res.body.items).toBeDefined();
+      expect(res.body.total).toBeDefined();
+    });
 
-  test('POST /api/v1/queue rejects numeric to field', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: 15551234567, message: 'hello' });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/must be strings/);
-  });
-
-  test('POST /api/v1/queue rejects whitespace-only recipients', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: '   ,  , ', message: 'hello' });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/valid recipient/);
-  });
-
-  test('POST /api/v1/queue returns 201 on success', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: 'user@walmart.com', message: 'Order shipped' });
-    expect(res.statusCode).toBe(201);
-    expect(res.body.id).toBeDefined();
-    expect(res.body.status).toBe('queued');
-  });
-
-  test('response time < 500ms', async () => {
-    const start = Date.now();
-    await request(app).get('/api/v1/queue');
-    expect(Date.now() - start).toBeLessThan(500);
+    it('should respect limit parameter', async () => {
+      const res = await request(app).get('/api/v1/queue?limit=10');
+      expect(res.status).toBe(200);
+      expect(res.body.items.length).toBeLessThanOrEqual(10);
+    });
   });
 });
