@@ -11,7 +11,7 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/api/v1/queue', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
   res.json({
     items: queue.slice(-limit),
     total: queue.length
