@@ -12,9 +12,28 @@ app.get('/health', (req, res) => {
 
 app.get('/api/v1/queue', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const { channel, status, priority } = req.query;
+
+  let filtered = queue;
+
+  if (channel) {
+    const channelLower = channel.toLowerCase();
+    filtered = filtered.filter(item => item.channel.toLowerCase() === channelLower);
+  }
+
+  if (status) {
+    const statusLower = status.toLowerCase();
+    filtered = filtered.filter(item => item.status.toLowerCase() === statusLower);
+  }
+
+  if (priority) {
+    const priorityLower = priority.toLowerCase();
+    filtered = filtered.filter(item => item.priority.toLowerCase() === priorityLower);
+  }
+
   res.json({
-    items: queue.slice(-limit),
-    total: queue.length
+    items: filtered.slice(-limit),
+    total: filtered.length
   });
 });
 
