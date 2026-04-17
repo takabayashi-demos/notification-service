@@ -1,15 +1,23 @@
 {
   "name": "notification-service",
-  "version": "1.4.2",
-  "description": "Multi-channel notification delivery service",
+  "version": "1.0.0",
+  "description": "Walmart notification delivery service",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "test": "echo \"No tests\" && exit 0"
+    "test": "jest --coverage",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "nodemailer": "^6.9.1",
-    "node-fetch": "^3.3.0"
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": ["/node_modules/"],
+    "testMatch": ["**/*.test.js"]
   }
 }
