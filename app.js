@@ -1,10 +1,19 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const app = express();
 
 app.use(express.json());
 
 const queue = [];
 let idCounter = 0;
+
+const queueLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', timestamp: new Date().toISOString() });
@@ -18,7 +27,7 @@ app.get('/api/v1/queue', (req, res) => {
   });
 });
 
-app.post('/api/v1/queue', (req, res) => {
+app.post('/api/v1/queue', queueLimiter, (req, res) => {
   try {
     const { to, message, channel, priority } = req.body || {};
 
