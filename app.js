@@ -59,4 +59,12 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+const PORT = process.env.PORT || 8080;
+
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`notification-service listening on port ${PORT}`);
+  });
+}
+
 module.exports = app;
