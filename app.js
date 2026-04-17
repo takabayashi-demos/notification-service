@@ -1,10 +1,13 @@
 const express = require('express');
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
 const queue = [];
 let idCounter = 0;
+
+const VALID_CHANNELS = ['email', 'sms', 'push'];
+const VALID_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', timestamp: new Date().toISOString() });
@@ -30,18 +33,32 @@ app.post('/api/v1/queue', (req, res) => {
       return res.status(400).json({ error: 'Fields "to" and "message" must be strings' });
     }
 
+    if (message.length > 10000) {
+      return res.status(400).json({ error: 'Message exceeds maximum length of 10000 characters' });
+    }
+
     const recipients = to.split(',').map(r => r.trim()).filter(Boolean);
 
     if (recipients.length === 0) {
       return res.status(400).json({ error: 'At least one valid recipient is required' });
     }
 
+    const validatedChannel = channel || 'email';
+    if (!VALID_CHANNELS.includes(validatedChannel)) {
+      return res.status(400).json({ error: `Invalid channel. Must be one of: ${VALID_CHANNELS.join(', ')}` });
+    }
+
+    const validatedPriority = priority || 'normal';
+    if (!VALID_PRIORITIES.includes(validatedPriority)) {
+      return res.status(400).json({ error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}` });
+    }
+
     const entry = {
       id: `notif-${++idCounter}`,
       recipients,
       message,
-      channel: channel || 'email',
-      priority: priority || 'normal',
+      channel: validatedChannel,
+      priority: validatedPriority,
       status: 'queued',
       createdAt: new Date().toISOString()
     };
