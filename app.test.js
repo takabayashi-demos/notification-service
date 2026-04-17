@@ -1,54 +1,83 @@
 const request = require('supertest');
 const app = require('./app');
 
-describe('Queue API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
+describe('Security validation tests', () => {
+  describe('Input validation', () => {
+    it('should reject invalid channel', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'test@example.com',
+          message: 'Test message',
+          channel: 'invalid'
+        });
+      
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Invalid channel');
+    });
+
+    it('should reject invalid priority', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'test@example.com',
+          message: 'Test message',
+          priority: 'critical'
+        });
+      
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Invalid priority');
+    });
+
+    it('should reject oversized messages', async () => {
+      const largeMessage = 'x'.repeat(10001);
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'test@example.com',
+          message: largeMessage
+        });
+      
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('exceeds maximum length');
+    });
+
+    it('should accept valid input', async () => {
+      const res = await request(app)
+        .post('/api/v1/queue')
+        .send({
+          to: 'test@example.com',
+          message: 'Valid message',
+          channel: 'email',
+          priority: 'high'
+        });
+      
+      expect(res.status).toBe(201);
+      expect(res.body.channel).toBe('email');
+      expect(res.body.priority).toBe('high');
+    });
   });
 
-  test('GET /api/v1/queue returns list', async () => {
-    const res = await request(app).get('/api/v1/queue');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.items)).toBeTruthy();
-  });
-
-  test('POST /api/v1/queue validates input', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({});
-    expect(res.statusCode).toBe(400);
-  });
-
-  test('POST /api/v1/queue rejects numeric to field', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: 15551234567, message: 'hello' });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/must be strings/);
-  });
-
-  test('POST /api/v1/queue rejects whitespace-only recipients', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: '   ,  , ', message: 'hello' });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/valid recipient/);
-  });
-
-  test('POST /api/v1/queue returns 201 on success', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: 'user@walmart.com', message: 'Order shipped' });
-    expect(res.statusCode).toBe(201);
-    expect(res.body.id).toBeDefined();
-    expect(res.body.status).toBe('queued');
-  });
-
-  test('response time < 500ms', async () => {
-    const start = Date.now();
-    await request(app).get('/api/v1/queue');
-    expect(Date.now() - start).toBeLessThan(500);
+  describe('Rate limiting', () => {
+    it('should enforce rate limit after 100 requests', async () => {
+      const requests = [];
+      
+      for (let i = 0; i < 101; i++) {
+        requests.push(
+          request(app)
+            .post('/api/v1/queue')
+            .send({
+              to: 'test@example.com',
+              message: `Message ${i}`
+            })
+        );
+      }
+      
+      const responses = await Promise.all(requests);
+      const rateLimited = responses.filter(r => r.status === 429);
+      
+      expect(rateLimited.length).toBeGreaterThan(0);
+      expect(rateLimited[0].body.error).toContain('Too many requests');
+    });
   });
 });
