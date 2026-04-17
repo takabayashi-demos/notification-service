@@ -54,6 +54,27 @@ app.post('/api/v1/queue', (req, res) => {
   }
 });
 
+app.delete('/api/v1/queue/:id', (req, res) => {
+  const { id } = req.params;
+  
+  const notification = queue.find(n => n.id === id);
+  
+  if (!notification) {
+    return res.status(404).json({ error: 'Notification not found' });
+  }
+  
+  if (notification.status !== 'queued') {
+    return res.status(400).json({ 
+      error: `Cannot cancel notification with status: ${notification.status}` 
+    });
+  }
+  
+  notification.status = 'cancelled';
+  notification.cancelledAt = new Date().toISOString();
+  
+  res.json(notification);
+});
+
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.message);
   res.status(500).json({ error: 'Internal server error' });
