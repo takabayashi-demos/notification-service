@@ -3,6 +3,7 @@ const app = express();
 
 app.use(express.json());
 
+// In-memory notification queue (stateless - resets on restart)
 const queue = [];
 let idCounter = 0;
 
@@ -10,6 +11,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'UP', timestamp: new Date().toISOString() });
 });
 
+// Retrieve recent notifications from the queue
+// Used by background workers to poll for pending notifications
 app.get('/api/v1/queue', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   res.json({
@@ -18,10 +21,12 @@ app.get('/api/v1/queue', (req, res) => {
   });
 });
 
+// Enqueue a new notification for delivery
 app.post('/api/v1/queue', (req, res) => {
   try {
     const { to, message, channel, priority } = req.body || {};
 
+    // Validate required fields
     if (!to || !message) {
       return res.status(400).json({ error: 'Missing required fields: to, message' });
     }
@@ -30,12 +35,14 @@ app.post('/api/v1/queue', (req, res) => {
       return res.status(400).json({ error: 'Fields "to" and "message" must be strings' });
     }
 
+    // Parse comma-separated recipient list
     const recipients = to.split(',').map(r => r.trim()).filter(Boolean);
 
     if (recipients.length === 0) {
       return res.status(400).json({ error: 'At least one valid recipient is required' });
     }
 
+    // Create notification entry with auto-incremented ID
     const entry = {
       id: `notif-${++idCounter}`,
       recipients,
@@ -54,6 +61,7 @@ app.post('/api/v1/queue', (req, res) => {
   }
 });
 
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.message);
   res.status(500).json({ error: 'Internal server error' });
