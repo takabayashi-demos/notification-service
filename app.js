@@ -3,11 +3,17 @@ const app = express();
 
 app.use(express.json());
 
+const MAX_QUEUE_SIZE = 10000;
 const queue = [];
 let idCounter = 0;
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'UP', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'UP',
+    timestamp: new Date().toISOString(),
+    queueSize: queue.length,
+    queueLimit: MAX_QUEUE_SIZE
+  });
 });
 
 app.get('/api/v1/queue', (req, res) => {
@@ -47,6 +53,11 @@ app.post('/api/v1/queue', (req, res) => {
     };
 
     queue.push(entry);
+
+    if (queue.length > MAX_QUEUE_SIZE) {
+      queue.shift();
+    }
+
     res.status(201).json(entry);
   } catch (err) {
     console.error('Queue insertion error:', err.message);
