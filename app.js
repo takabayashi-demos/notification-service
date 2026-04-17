@@ -1,10 +1,51 @@
 const express = require('express');
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
 const queue = [];
 let idCounter = 0;
+
+const VALID_CHANNELS = ['email', 'sms', 'push'];
+const VALID_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
+const RATE_LIMIT_MAX = 100;
+
+function rateLimitMiddleware(req, res, next) {
+  const clientIp = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  if (!rateLimitStore.has(clientIp)) {
+    rateLimitStore.set(clientIp, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return next();
+  }
+  
+  const record = rateLimitStore.get(clientIp);
+  
+  if (now > record.resetAt) {
+    rateLimitStore.set(clientIp, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return next();
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX) {
+    res.set('Retry-After', Math.ceil((record.resetAt - now) / 1000));
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  }
+  
+  record.count++;
+  next();
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimitStore.entries()) {
+    if (now > record.resetAt) {
+      rateLimitStore.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', timestamp: new Date().toISOString() });
@@ -18,7 +59,7 @@ app.get('/api/v1/queue', (req, res) => {
   });
 });
 
-app.post('/api/v1/queue', (req, res) => {
+app.post('/api/v1/queue', rateLimitMiddleware, (req, res) => {
   try {
     const { to, message, channel, priority } = req.body || {};
 
@@ -30,18 +71,32 @@ app.post('/api/v1/queue', (req, res) => {
       return res.status(400).json({ error: 'Fields "to" and "message" must be strings' });
     }
 
+    if (message.length > 10000) {
+      return res.status(400).json({ error: 'Message exceeds maximum length of 10000 characters' });
+    }
+
     const recipients = to.split(',').map(r => r.trim()).filter(Boolean);
 
     if (recipients.length === 0) {
       return res.status(400).json({ error: 'At least one valid recipient is required' });
     }
 
+    const validatedChannel = channel || 'email';
+    if (!VALID_CHANNELS.includes(validatedChannel)) {
+      return res.status(400).json({ error: `Invalid channel. Must be one of: ${VALID_CHANNELS.join(', ')}` });
+    }
+
+    const validatedPriority = priority || 'normal';
+    if (!VALID_PRIORITIES.includes(validatedPriority)) {
+      return res.status(400).json({ error: `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}` });
+    }
+
     const entry = {
       id: `notif-${++idCounter}`,
       recipients,
       message,
-      channel: channel || 'email',
-      priority: priority || 'normal',
+      channel: validatedChannel,
+      priority: validatedPriority,
       status: 'queued',
       createdAt: new Date().toISOString()
     };
