@@ -3,15 +3,65 @@ const app = express();
 
 app.use(express.json());
 
+// Constants
+const QUEUE_DEFAULT_LIMIT = 50;
+const QUEUE_MAX_LIMIT = 200;
+const DEFAULT_CHANNEL = 'email';
+const DEFAULT_PRIORITY = 'normal';
+const VALID_CHANNELS = ['email', 'sms', 'push'];
+const VALID_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+
 const queue = [];
 let idCounter = 0;
+
+// Validation helpers
+function validateNotificationRequest(body) {
+  const errors = [];
+  
+  if (!body) {
+    return { valid: false, errors: ['Request body is required'] };
+  }
+
+  const { to, message, channel, priority } = body;
+
+  if (!to) errors.push('Field "to" is required');
+  if (!message) errors.push('Field "message" is required');
+
+  if (to && typeof to !== 'string') {
+    errors.push('Field "to" must be a string');
+  }
+  if (message && typeof message !== 'string') {
+    errors.push('Field "message" must be a string');
+  }
+
+  if (channel && !VALID_CHANNELS.includes(channel)) {
+    errors.push(`Invalid channel. Must be one of: ${VALID_CHANNELS.join(', ')}`);
+  }
+
+  if (priority && !VALID_PRIORITIES.includes(priority)) {
+    errors.push(`Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+function parseRecipients(to) {
+  if (!to) return [];
+  return to.split(',').map(r => r.trim()).filter(Boolean);
+}
 
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', timestamp: new Date().toISOString() });
 });
 
 app.get('/api/v1/queue', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const limit = Math.min(
+    parseInt(req.query.limit) || QUEUE_DEFAULT_LIMIT,
+    QUEUE_MAX_LIMIT
+  );
   res.json({
     items: queue.slice(-limit),
     total: queue.length
@@ -20,28 +70,31 @@ app.get('/api/v1/queue', (req, res) => {
 
 app.post('/api/v1/queue', (req, res) => {
   try {
-    const { to, message, channel, priority } = req.body || {};
-
-    if (!to || !message) {
-      return res.status(400).json({ error: 'Missing required fields: to, message' });
+    const validation = validateNotificationRequest(req.body);
+    
+    if (!validation.valid) {
+      return res.status(400).json({ 
+        error: 'Validation failed',
+        details: validation.errors 
+      });
     }
 
-    if (typeof to !== 'string' || typeof message !== 'string') {
-      return res.status(400).json({ error: 'Fields "to" and "message" must be strings' });
-    }
-
-    const recipients = to.split(',').map(r => r.trim()).filter(Boolean);
+    const { to, message, channel, priority } = req.body;
+    const recipients = parseRecipients(to);
 
     if (recipients.length === 0) {
-      return res.status(400).json({ error: 'At least one valid recipient is required' });
+      return res.status(400).json({ 
+        error: 'Validation failed',
+        details: ['At least one valid recipient is required']
+      });
     }
 
     const entry = {
       id: `notif-${++idCounter}`,
       recipients,
       message,
-      channel: channel || 'email',
-      priority: priority || 'normal',
+      channel: channel || DEFAULT_CHANNEL,
+      priority: priority || DEFAULT_PRIORITY,
       status: 'queued',
       createdAt: new Date().toISOString()
     };
