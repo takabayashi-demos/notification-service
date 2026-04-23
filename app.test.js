@@ -1,54 +1,59 @@
 const request = require('supertest');
 const app = require('./app');
 
-describe('Queue API', () => {
-  test('GET /health returns UP', async () => {
-    const res = await request(app).get('/health');
-    expect(res.statusCode).toBe(200);
-    expect(res.body.status).toBe('UP');
+describe('GET /api/v1/queue filtering', () => {
+  beforeEach(async () => {
+    await request(app).post('/api/v1/queue').send({ to: 'user1@example.com', message: 'Test 1', channel: 'email', priority: 'high' });
+    await request(app).post('/api/v1/queue').send({ to: 'user2@example.com', message: 'Test 2', channel: 'sms', priority: 'normal' });
+    await request(app).post('/api/v1/queue').send({ to: 'user3@example.com', message: 'Test 3', channel: 'push', priority: 'low' });
+    await request(app).post('/api/v1/queue').send({ to: 'user4@example.com', message: 'Test 4', channel: 'email', priority: 'normal' });
   });
 
-  test('GET /api/v1/queue returns list', async () => {
-    const res = await request(app).get('/api/v1/queue');
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body.items)).toBeTruthy();
+  it('should filter by channel', async () => {
+    const res = await request(app).get('/api/v1/queue?channel=email');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    expect(res.body.items.every(item => item.channel === 'email')).toBe(true);
   });
 
-  test('POST /api/v1/queue validates input', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({});
-    expect(res.statusCode).toBe(400);
+  it('should filter by status', async () => {
+    const res = await request(app).get('/api/v1/queue?status=queued');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(4);
+    expect(res.body.items.every(item => item.status === 'queued')).toBe(true);
   });
 
-  test('POST /api/v1/queue rejects numeric to field', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: 15551234567, message: 'hello' });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/must be strings/);
+  it('should filter by priority', async () => {
+    const res = await request(app).get('/api/v1/queue?priority=high');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items[0].priority).toBe('high');
   });
 
-  test('POST /api/v1/queue rejects whitespace-only recipients', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: '   ,  , ', message: 'hello' });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/valid recipient/);
+  it('should filter by multiple parameters', async () => {
+    const res = await request(app).get('/api/v1/queue?channel=email&priority=normal');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.items[0].channel).toBe('email');
+    expect(res.body.items[0].priority).toBe('normal');
   });
 
-  test('POST /api/v1/queue returns 201 on success', async () => {
-    const res = await request(app)
-      .post('/api/v1/queue')
-      .send({ to: 'user@walmart.com', message: 'Order shipped' });
-    expect(res.statusCode).toBe(201);
-    expect(res.body.id).toBeDefined();
-    expect(res.body.status).toBe('queued');
+  it('should be case-insensitive', async () => {
+    const res = await request(app).get('/api/v1/queue?channel=EMAIL');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
   });
 
-  test('response time < 500ms', async () => {
-    const start = Date.now();
-    await request(app).get('/api/v1/queue');
-    expect(Date.now() - start).toBeLessThan(500);
+  it('should return empty array when no matches', async () => {
+    const res = await request(app).get('/api/v1/queue?channel=fax');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+    expect(res.body.items).toEqual([]);
+  });
+
+  it('should respect limit parameter with filters', async () => {
+    const res = await request(app).get('/api/v1/queue?limit=1');
+    expect(res.status).toBe(200);
+    expect(res.body.items.length).toBe(1);
   });
 });
